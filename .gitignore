@@ -1,0 +1,22 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Crash dumps
+*.stackdump
+
+# Personal Claude settings (the shared .claude/settings.json is committed)
+.claude/settings.local.json
