@@ -50,6 +50,9 @@ left, mid, right = st.columns([1, 1.15, 1.35], gap="large")
 with left:
     st.subheader("Simulated Silo Telemetry")
     st.caption("Demo inputs only — these are not live sensor readings.")
+    for key, default in (("storage_days", 0), ("silo_temp", 20), ("moisture", 60)):
+        st.session_state.setdefault(key, default)
+
     presets = st.columns(3)
     if presets[0].button("Normal", width="stretch"):
         st.session_state["storage_days"] = 0
@@ -57,16 +60,16 @@ with left:
         st.session_state["moisture"] = 60
     if presets[1].button("Hot summer silo", width="stretch"):
         st.session_state["storage_days"] = 45
-        st.session_state["silo_temp"] = 40
+        st.session_state["silo_temp"] = 44
         st.session_state["moisture"] = 60
     if presets[2].button("Wet and spoiled", width="stretch"):
         st.session_state["storage_days"] = 45
         st.session_state["silo_temp"] = 30
         st.session_state["moisture"] = 74
 
-    days = st.slider("Storage days", 0, 60, 0, key="storage_days")
-    temp = st.slider("Silo temp (°C)", 15, 45, 20, key="silo_temp")
-    moisture = st.slider("Moisture (%)", 50, 75, 60, key="moisture")
+    days = st.slider("Storage days", 0, 60, key="storage_days")
+    temp = st.slider("Silo temp (°C)", 15, 45, key="silo_temp")
+    moisture = st.slider("Moisture (%)", 50, 75, key="moisture")
     auto_mode = st.toggle("Auto mode", value=False)
     run_clicked = st.button("Run Nutrition Agent", type="primary", width="stretch")
 
@@ -95,6 +98,12 @@ with mid:
     st.caption(f"{baseline_cp:.1f}% baseline → {now_cp:.1f}% current")
 
     if result:
+        mode, color = {
+            "gemini": ("Live Gemini", "green"),
+            "replay": ("Replay", "orange"),
+            "offline": ("Offline", "gray"),
+        }.get(result.get("mode"), ("Unknown mode", "gray"))
+        st.badge(mode, color=color)
         for step in result.get("log", []):
             name = step.get("name", "Agent step")
             if step.get("type") == "tool_call":
