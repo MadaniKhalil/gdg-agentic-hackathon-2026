@@ -8,6 +8,7 @@ import os
 import time
 from pathlib import Path
 
+import httpx
 from google import genai
 from google.genai import errors, types
 
@@ -16,6 +17,7 @@ from core.optimizer import optimize_ration
 
 ROOT = Path(__file__).parent
 MAX_STEPS = 6
+REQUEST_TIMEOUT_MS = 30_000
 ATTEMPTS_PER_MODEL = 2
 RETRY_WAIT_SECONDS = 2
 HERD_SIZE = 200
@@ -45,7 +47,10 @@ def _load_env() -> None:
 
 
 _load_env()
-FALLBACK_MODELS = ("gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash")
+FALLBACK_MODELS = (
+    "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash",
+)
 MODELS = (os.environ.get("GEMINI_MODEL", "gemini-3.8-flash"), *FALLBACK_MODELS)
 
 
@@ -123,8 +128,16 @@ def _generate_with_retry(client, contents, config):
         for attempt in range(ATTEMPTS_PER_MODEL):
             try:
                 return client.models.generate_content(model=model, contents=contents, config=config)
-            except errors.ServerError as error:
+            except httpx.TimeoutException:
+                print(f"{model} timed out. Trying next model.", flush=True)
+                break
+            except errors.APIError as error:
+                if error.code not in (429, 503, 504):
+                    raise
                 last_error = error
+                if error.code in (429, 504):  # quota used up or deadline hit: skip to the next model
+                    print(f"{model} unavailable ({error.code}). Trying next model.", flush=True)
+                    break
                 print(f"{model} busy (503). Attempt {attempt + 1}/{ATTEMPTS_PER_MODEL}.", flush=True)
                 time.sleep(RETRY_WAIT_SECONDS)
     raise last_error
@@ -137,7 +150,7 @@ def run_agent(days: int, temp_c: float, moisture_pct: float) -> dict:
         return {"ok": False, "log": [], "final": "GOOGLE_API_KEY missing. Add it to .env."}
 
     tools = _build_tools(days, temp_c, moisture_pct)
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
         tools=list(tools.values()),
