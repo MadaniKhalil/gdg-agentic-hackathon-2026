@@ -32,6 +32,18 @@ def get_ration_result(result):
     )
 
 
+def use_live_debrecen_temperature():
+    ambient_temp = get_ambient_temp_c()
+    if ambient_temp is None:
+        st.session_state["weather_unreachable"] = True
+        st.session_state.pop("weather_temp_c", None)
+        return
+
+    st.session_state["silo_temp"] = int(min(45, max(15, round(ambient_temp))))
+    st.session_state["weather_temp_c"] = ambient_temp
+    st.session_state["weather_unreachable"] = False
+
+
 st.set_page_config(page_title="Feed Ration Agent", page_icon="🐄", layout="wide")
 st.markdown(
     """<style>
@@ -68,16 +80,21 @@ with left:
         st.session_state["silo_temp"] = 30
         st.session_state["moisture"] = 74
 
-    if st.button("Use live Debrecen air temperature", width="stretch"):
-        air_temp = get_ambient_temp_c()
-        if air_temp is None:
-            st.warning("Weather service unreachable. Sliders unchanged.")
-        else:
-            st.session_state["silo_temp"] = int(min(45, max(15, round(air_temp))))
-            st.caption(f"Live air temperature in Debrecen: {air_temp:.1f} °C (ambient air, not silo temperature).")
-
     days = st.slider("Storage days", 0, 60, key="storage_days")
     temp = st.slider("Silo temp (°C)", 15, 45, key="silo_temp")
+    st.button(
+        "Use live Debrecen air temperature",
+        on_click=use_live_debrecen_temperature,
+        width="stretch",
+    )
+    if st.session_state.get("weather_unreachable"):
+        st.warning("Weather service unreachable")
+    elif "weather_temp_c" in st.session_state:
+        st.caption(
+            f"Live air temperature in Debrecen: "
+            f"{st.session_state['weather_temp_c']:.1f} C "
+            "(ambient air, not silo temperature)"
+        )
     moisture = st.slider("Moisture (%)", 50, 75, key="moisture")
     auto_mode = st.toggle("Auto mode", value=False)
     run_clicked = st.button("Run Nutrition Agent", type="primary", width="stretch")
@@ -107,12 +124,12 @@ with mid:
     st.caption(f"{baseline_cp:.1f}% baseline → {now_cp:.1f}% current")
 
     if result:
-        mode, color = {
-            "gemini": ("Live Gemini", "green"),
-            "replay": ("Replay", "orange"),
-            "offline": ("Offline", "gray"),
-        }.get(result.get("mode"), ("Unknown mode", "gray"))
-        st.badge(mode, color=color)
+        mode = {
+            "gemini": "Live Gemini",
+            "replay": "Replay of last run",
+            "offline": "Offline fallback",
+        }.get(result.get("mode"), "Unknown mode")
+        st.caption(mode)
         for step in result.get("log", []):
             name = step.get("name", "Agent step")
             if step.get("type") == "tool_call":
@@ -124,15 +141,17 @@ with mid:
                     render_values(details)
                 else:
                     st.write(details)
+    else:
+        st.info("Select a silo preset or adjust the telemetry, then run the agent.")
+
+with right:
+    if result:
         st.subheader("Farmer note")
         if result.get("ok"):
             st.success(result.get("final") or "Agent completed without a farmer note.")
         else:
             st.error(result.get("final") or "The nutrition agent could not complete.")
-    else:
-        st.info("Select a silo preset or adjust the telemetry, then run the agent.")
 
-with right:
     st.subheader("Old vs new recipe")
     st.caption("kg fresh feed per cow per day")
     if not result:
