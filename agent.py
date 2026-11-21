@@ -5,16 +5,19 @@ Use from the app:  from agent import run_agent; result = run_agent(days, temp_c,
 """
 import json
 import os
+import time
 from pathlib import Path
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 from core.decay import apply_storage_drift
 from core.optimizer import optimize_ration
 
 ROOT = Path(__file__).parent
 MAX_STEPS = 6
+ATTEMPTS_PER_MODEL = 2
+RETRY_WAIT_SECONDS = 2
 HERD_SIZE = 200
 STOCK_KG = {"soybean_meal": 1500.0}  # mock inventory for the demo
 SMALL_DRIFT_CP_POINTS = 0.3
@@ -42,7 +45,8 @@ def _load_env() -> None:
 
 
 _load_env()
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+FALLBACK_MODELS = ("gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash")
+MODELS = (os.environ.get("GEMINI_MODEL", "gemini-3.8-flash"), *FALLBACK_MODELS)
 
 
 def _load_data() -> tuple[dict, dict]:
@@ -112,6 +116,20 @@ def _execute_calls(calls, tools: dict, log: list) -> list:
     return parts
 
 
+def _generate_with_retry(client, contents, config):
+    """On Gemini overload (503), try each model in MODELS a couple of times, then move to the next."""
+    last_error = None
+    for model in MODELS:
+        for attempt in range(ATTEMPTS_PER_MODEL):
+            try:
+                return client.models.generate_content(model=model, contents=contents, config=config)
+            except errors.ServerError as error:
+                last_error = error
+                print(f"{model} busy (503). Attempt {attempt + 1}/{ATTEMPTS_PER_MODEL}.", flush=True)
+                time.sleep(RETRY_WAIT_SECONDS)
+    raise last_error
+
+
 def run_agent(days: int, temp_c: float, moisture_pct: float) -> dict:
     """Run the agent loop. Returns {"ok": bool, "log": [...], "final": str}."""
     api_key = os.environ.get("GOOGLE_API_KEY")
@@ -130,7 +148,7 @@ def run_agent(days: int, temp_c: float, moisture_pct: float) -> dict:
 
     try:
         for _ in range(MAX_STEPS):
-            response = client.models.generate_content(model=MODEL, contents=contents, config=config)
+            response = _generate_with_retry(client, contents, config)
             calls = response.function_calls or []
             if not calls:
                 log.append({"type": "final"})
