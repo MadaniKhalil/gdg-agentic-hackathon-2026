@@ -51,15 +51,15 @@ with left:
     st.subheader("Simulated Silo Telemetry")
     st.caption("Demo inputs only — these are not live sensor readings.")
     presets = st.columns(3)
-    if presets[0].button("Normal", use_container_width=True):
+    if presets[0].button("Normal", width="stretch"):
         st.session_state["storage_days"] = 0
         st.session_state["silo_temp"] = 20
         st.session_state["moisture"] = 60
-    if presets[1].button("Hot summer silo", use_container_width=True):
+    if presets[1].button("Hot summer silo", width="stretch"):
         st.session_state["storage_days"] = 45
         st.session_state["silo_temp"] = 40
         st.session_state["moisture"] = 60
-    if presets[2].button("Wet and spoiled", use_container_width=True):
+    if presets[2].button("Wet and spoiled", width="stretch"):
         st.session_state["storage_days"] = 45
         st.session_state["silo_temp"] = 30
         st.session_state["moisture"] = 74
@@ -68,7 +68,7 @@ with left:
     temp = st.slider("Silo temp (°C)", 15, 45, 20, key="silo_temp")
     moisture = st.slider("Moisture (%)", 50, 75, 60, key="moisture")
     auto_mode = st.toggle("Auto mode", value=False)
-    run_clicked = st.button("Run Nutrition Agent", type="primary", use_container_width=True)
+    run_clicked = st.button("Run Nutrition Agent", type="primary", width="stretch")
 
 drifted = apply_storage_drift(base_feeds, days, temp, moisture)
 baseline_cp = base_feeds["corn_silage"]["cp_pct_dm"]
@@ -136,7 +136,7 @@ with right:
             }
             for name, old_kg in old_recipe.items()
         ]
-        st.dataframe(rows, hide_index=True, use_container_width=True)
+        st.dataframe(rows, hide_index=True, width="stretch")
         old_cow_cost = ration_result["old_cost_eur_per_cow_day"]
         new_cow_cost = ration_result["new_cost_eur_per_cow_day"]
         old_herd_cost = old_cow_cost * HERD_SIZE
