@@ -3,6 +3,7 @@
 Run a quick test:  uv run python agent.py
 Use from the app:  from agent import run_agent; result = run_agent(days, temp_c, moisture_pct)
 """
+import hashlib
 import json
 import os
 import time
@@ -18,7 +19,8 @@ from core.optimizer import optimize_ration
 ROOT = Path(__file__).parent
 MAX_STEPS = 6
 CACHE_FILE = ROOT / "data" / "last_runs.json"
-REQUEST_TIMEOUT_MS = 30_000
+REQUEST_TIMEOUT_MS = 20_000
+AGENT_TIME_BUDGET_SECONDS = 60
 ATTEMPTS_PER_MODEL = 2
 RETRY_WAIT_SECONDS = 2
 HERD_SIZE = 200
@@ -130,11 +132,13 @@ def _execute_calls(calls, tools: dict, log: list) -> list:
     return parts
 
 
-def _generate_with_retry(client, contents, config):
-    """On Gemini overload (503), try each model in MODELS a couple of times, then move to the next."""
+def _generate_with_retry(client, contents, config, deadline: float):
+    """Try each model in MODELS (retrying 503s), until the time budget `deadline` runs out."""
     last_error = None
     for model in MODELS:
         for attempt in range(ATTEMPTS_PER_MODEL):
+            if time.monotonic() > deadline:
+                raise TimeoutError("Gemini too slow: time budget used up")
             try:
                 return client.models.generate_content(model=model, contents=contents, config=config)
             except httpx.TimeoutException:
@@ -167,10 +171,11 @@ def _run_gemini(days: int, temp_c: float, moisture_pct: float) -> dict:
     )
     contents = [types.Content(role="user", parts=[types.Part(text="Check the silo and update the ration if needed.")])]
     log: list = []
+    deadline = time.monotonic() + AGENT_TIME_BUDGET_SECONDS
 
     try:
         for _ in range(MAX_STEPS):
-            response = _generate_with_retry(client, contents, config)
+            response = _generate_with_retry(client, contents, config, deadline)
             calls = response.function_calls or []
             if not calls:
                 log.append({"type": "final"})
@@ -184,7 +189,9 @@ def _run_gemini(days: int, temp_c: float, moisture_pct: float) -> dict:
 
 
 def _cache_key(days: int, temp_c: float, moisture_pct: float) -> str:
-    return f"{days}|{temp_c}|{moisture_pct}"
+    """Include a fingerprint of the data file, so edited feed data never replays old results."""
+    data_hash = hashlib.sha256((ROOT / "data" / "feeds.json").read_bytes()).hexdigest()[:8]
+    return f"{data_hash}|{days}|{temp_c}|{moisture_pct}"
 
 
 def _load_cache() -> dict:
