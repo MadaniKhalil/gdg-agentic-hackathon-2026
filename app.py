@@ -141,15 +141,17 @@ with mid:
                     render_values(details)
                 else:
                     st.write(details)
+    else:
+        st.info("Select a silo preset or adjust the telemetry, then run the agent.")
+
+with right:
+    if result:
         st.subheader("Farmer note")
         if result.get("ok"):
             st.success(result.get("final") or "Agent completed without a farmer note.")
         else:
             st.error(result.get("final") or "The nutrition agent could not complete.")
-    else:
-        st.info("Select a silo preset or adjust the telemetry, then run the agent.")
 
-with right:
     st.subheader("Old vs new recipe")
     st.caption("kg fresh feed per cow per day")
     if not result:
