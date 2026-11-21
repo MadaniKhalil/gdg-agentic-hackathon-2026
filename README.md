@@ -33,3 +33,15 @@ No hardware is connected in this demo. The optional "live air temperature" butto
 Feed values and spoilage rules were supplied by the agriculture team. Sources are listed in `data/feeds.json`
 (Feedipedia, DLG tables, NRC 2001 / NASEM 2021, Penn State and UW-Madison Extension, Agroinform.hu, AKI PAIR).
 The decay model is a simplified rule-based model, not a validated simulation.
+
+## Reliability
+Gemini's free tier is rate-limited, so `agent.py` never depends on a single call: it tries several Gemini models
+(and an optional second key, `GOOGLE_API_KEY_2`), then replays the last good run for the same inputs, then writes a
+templated offline note. The dashboard shows which one was used (Live Gemini / Replay / Offline). The soybean meal
+stock and herd size are demo values.
+
+## Tests
+```bash
+uv run pytest
+```
+Covers the decay model, the ration optimizer and the telemetry validation.

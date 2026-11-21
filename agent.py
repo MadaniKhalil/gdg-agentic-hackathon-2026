@@ -44,10 +44,10 @@ def _load_env() -> None:
     env_file = ROOT / ".env"
     if not env_file.exists():
         return
-    for line in env_file.read_text().splitlines():
+    for line in env_file.read_text(encoding="utf-8").splitlines():
         key, sep, value = line.partition("=")
         if sep and key.strip() and not key.startswith("#"):
-            os.environ.setdefault(key.strip(), value.strip())
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 
 _load_env()
@@ -59,7 +59,7 @@ MODELS = (os.environ.get("GEMINI_MODEL", "gemini-3.8-flash"), *FALLBACK_MODELS)
 
 
 def _load_data() -> tuple[dict, dict]:
-    data = json.loads((ROOT / "data" / "feeds.json").read_text())
+    data = json.loads((ROOT / "data" / "feeds.json").read_text(encoding="utf-8"))
     return data["feeds"], data["targets"]
 
 
@@ -111,6 +111,7 @@ def _build_tools(days: int, temp_c: float, moisture_pct: float) -> dict:
         daily_use = new["kg_fresh"]["soybean_meal"] * HERD_SIZE
         stock = STOCK_KG["soybean_meal"]
         return {
+            "stock_note": "demo value, not a real inventory",
             "soybean_meal_stock_kg": stock,
             "daily_use_kg_herd": round(daily_use, 1),
             "days_left": round(stock / daily_use, 1) if daily_use else None,
@@ -156,12 +157,26 @@ def _generate_with_retry(client, contents, config, deadline: float):
     raise last_error
 
 
-def _run_gemini(days: int, temp_c: float, moisture_pct: float) -> dict:
-    """One live Gemini agent run. Returns {"ok": bool, "log": [...], "final": str}."""
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        return {"ok": False, "log": [], "final": "GOOGLE_API_KEY missing. Add it to .env."}
+def _api_keys() -> list[str]:
+    """Keys from the environment, in order. A second key (another Google project) has its own quota."""
+    return [key for name in ("GOOGLE_API_KEY", "GOOGLE_API_KEY_2") if (key := os.environ.get(name))]
 
+
+def _run_gemini(days: int, temp_c: float, moisture_pct: float) -> dict:
+    """One live Gemini agent run, trying each API key in turn. Returns {"ok", "log", "final"}."""
+    keys = _api_keys()
+    if not keys:
+        return {"ok": False, "log": [], "final": "GOOGLE_API_KEY missing. Add it to .env."}
+    deadline = time.monotonic() + AGENT_TIME_BUDGET_SECONDS
+    result: dict = {}
+    for api_key in keys:
+        result = _attempt_with_key(api_key, days, temp_c, moisture_pct, deadline)
+        if result["ok"]:
+            break
+    return result
+
+
+def _attempt_with_key(api_key: str, days: int, temp_c: float, moisture_pct: float, deadline: float) -> dict:
     tools = _build_tools(days, temp_c, moisture_pct)
     client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
     config = types.GenerateContentConfig(
@@ -171,7 +186,6 @@ def _run_gemini(days: int, temp_c: float, moisture_pct: float) -> dict:
     )
     contents = [types.Content(role="user", parts=[types.Part(text="Check the silo and update the ration if needed.")])]
     log: list = []
-    deadline = time.monotonic() + AGENT_TIME_BUDGET_SECONDS
 
     try:
         for _ in range(MAX_STEPS):

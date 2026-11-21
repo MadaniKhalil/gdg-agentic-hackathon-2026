@@ -6,6 +6,7 @@ import streamlit as st
 
 from agent import HERD_SIZE, run_agent
 from core.decay import apply_storage_drift
+from core.weather import get_ambient_temp_c
 
 
 def render_values(values, indent=0):
@@ -40,7 +41,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-data = json.loads((Path(__file__).parent / "data" / "feeds.json").read_text())
+data = json.loads((Path(__file__).parent / "data" / "feeds.json").read_text(encoding="utf-8"))
 base_feeds, targets = data["feeds"], data["targets"]
 
 st.title("Feed Ration Agent")
@@ -66,6 +67,14 @@ with left:
         st.session_state["storage_days"] = 45
         st.session_state["silo_temp"] = 30
         st.session_state["moisture"] = 74
+
+    if st.button("Use live Debrecen air temperature", width="stretch"):
+        air_temp = get_ambient_temp_c()
+        if air_temp is None:
+            st.warning("Weather service unreachable. Sliders unchanged.")
+        else:
+            st.session_state["silo_temp"] = int(min(45, max(15, round(air_temp))))
+            st.caption(f"Live air temperature in Debrecen: {air_temp:.1f} °C (ambient air, not silo temperature).")
 
     days = st.slider("Storage days", 0, 60, key="storage_days")
     temp = st.slider("Silo temp (°C)", 15, 45, key="silo_temp")
