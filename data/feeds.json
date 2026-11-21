@@ -1,0 +1,11 @@
+{
+  "_note": "PLACEHOLDER values. Agri students: replace with sourced values and fill in 'source'.",
+  "targets": {"dm_kg": 22.0, "cp_fraction_min": 0.165, "nel_mj_per_kg_dm_min": 7.0},
+  "feeds": {
+    "corn_silage":  {"dm_pct": 35, "cp_pct_dm": 8,  "nel_mj_per_kg_dm": 6.6, "eur_per_kg_fresh": 0.04, "min_dm_kg": 0, "max_dm_kg": 14, "source": "TODO"},
+    "alfalfa_hay":  {"dm_pct": 88, "cp_pct_dm": 18, "nel_mj_per_kg_dm": 5.6, "eur_per_kg_fresh": 0.20, "min_dm_kg": 0, "max_dm_kg": 8,  "source": "TODO"},
+    "soybean_meal": {"dm_pct": 89, "cp_pct_dm": 48, "nel_mj_per_kg_dm": 8.2, "eur_per_kg_fresh": 0.45, "min_dm_kg": 0, "max_dm_kg": 5,  "source": "TODO"},
+    "barley":       {"dm_pct": 88, "cp_pct_dm": 12, "nel_mj_per_kg_dm": 7.6, "eur_per_kg_fresh": 0.22, "min_dm_kg": 0, "max_dm_kg": 8,  "source": "TODO"},
+    "mineral_mix":  {"dm_pct": 97, "cp_pct_dm": 0,  "nel_mj_per_kg_dm": 0.0, "eur_per_kg_fresh": 0.80, "min_dm_kg": 0.2, "max_dm_kg": 0.2, "source": "TODO"}
+  }
+}

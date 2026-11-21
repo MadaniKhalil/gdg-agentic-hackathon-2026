@@ -18,7 +18,9 @@ so working, demoable code beats perfect code.
 
 ## Git
 
-- Do not run `git commit` or `git push`. Tell me when a step is worth committing and suggest a short message; I commit myself.
+- You may run `git add`, `git commit` and `git push` yourself when a step is done and the demo works.
+- Before committing, run `git status` and make sure `.env` and other secrets are not staged. Stop and tell me if they are.
+- Use short conventional messages (`feat:`, `fix:`, `chore:`). Never force-push, and never rewrite history.
 
 ## Demo
 
