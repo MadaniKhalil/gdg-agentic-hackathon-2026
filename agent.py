@@ -24,12 +24,13 @@ RETRY_WAIT_SECONDS = 2
 HERD_SIZE = 200
 STOCK_KG = {"soybean_meal": 1500.0}  # mock inventory for the demo
 SMALL_DRIFT_CP_POINTS = 0.3
+SMALL_DRIFT_NEL_FRACTION = 0.02
 
 SYSTEM_PROMPT = f"""You are a dairy feed nutrition agent for a farm with {HERD_SIZE} cows.
 Stored corn silage can lose protein and dry matter when hot or damp. Silo readings are SIMULATED telemetry.
 Work step by step with your tools. Never invent numbers: every number must come from a tool result.
 1. Call check_silo_drift first.
-2. If the protein drop is small, say no change is needed and stop. Otherwise call rebalance_ration.
+2. If drift_is_small is true (protein and energy barely changed), say no change is needed and stop. Otherwise call rebalance_ration.
 3. If rebalance_ration returns feasible=false, explain why and recommend an action (e.g. buy fresh silage).
 4. After a rebalance, call check_inventory to see if soybean meal will run short.
 Finish with a short plain-language farmer note: why the silage changed, the new mix in kg fresh per cow per day,
@@ -73,8 +74,15 @@ def _build_tools(days: int, temp_c: float, moisture_pct: float) -> dict:
             "simulated_conditions": {"days": days, "temp_c": temp_c, "moisture_pct": moisture_pct},
             "silage_cp_pct_dm": {"before": before["cp_pct_dm"], "now": round(after["cp_pct_dm"], 2)},
             "silage_dm_pct": {"before": before["dm_pct"], "now": round(after["dm_pct"], 2)},
+            "silage_nel_mj_per_kg_dm": {
+                "before": before["nel_mj_per_kg_dm"], "now": round(after["nel_mj_per_kg_dm"], 2),
+            },
             "cp_drop_points": round(before["cp_pct_dm"] - after["cp_pct_dm"], 2),
-            "drift_is_small": before["cp_pct_dm"] - after["cp_pct_dm"] < SMALL_DRIFT_CP_POINTS,
+            "nel_drop_pct": round(100 * (1 - after["nel_mj_per_kg_dm"] / before["nel_mj_per_kg_dm"]), 1),
+            "drift_is_small": (
+                before["cp_pct_dm"] - after["cp_pct_dm"] < SMALL_DRIFT_CP_POINTS
+                and 1 - after["nel_mj_per_kg_dm"] / before["nel_mj_per_kg_dm"] < SMALL_DRIFT_NEL_FRACTION
+            ),
         }
 
     def rebalance_ration() -> dict:
@@ -199,7 +207,7 @@ def _offline_note(drift: dict, ration: dict | None, stock: dict | None) -> str:
     if not ration or not ration["feasible"]:
         return "Silage protein dropped, and no ration meets the targets. Buy fresh silage or a protein feed."
     lines = [
-        f"Silage protein fell by {drift['cp_drop_points']} points. New ration (kg fresh per cow per day): "
+        f"Silage protein fell by {drift['cp_drop_points']} points and energy by {drift['nel_drop_pct']}%. New ration (kg fresh per cow per day): "
         + ", ".join(f"{name} {kg}" for name, kg in ration["new_recipe_kg_fresh"].items()) + ".",
         f"Cost: {ration['new_cost_eur_per_cow_day']} EUR per cow per day, "
         f"{ration['extra_cost_eur_per_day_herd']} EUR per day more for the herd.",

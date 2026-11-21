@@ -1,11 +1,20 @@
 {
-  "_note": "PLACEHOLDER values. Agri students: replace with sourced values and fill in 'source'.",
-  "targets": {"dm_kg": 22.0, "cp_fraction_min": 0.165, "nel_mj_per_kg_dm_min": 7.0},
+  "_note": "Values supplied by the agri team (student A). Citations still needed: see 'source' fields.",
+  "cow_profile": "650 kg lactating Holstein, ~30 L milk/day",
+  "targets": {"dm_kg": 22.0, "cp_fraction_min": 0.158, "nel_mj_per_kg_dm_min": 6.5},
   "feeds": {
-    "corn_silage":  {"dm_pct": 35, "cp_pct_dm": 8,  "nel_mj_per_kg_dm": 6.6, "eur_per_kg_fresh": 0.04, "min_dm_kg": 0, "max_dm_kg": 14, "source": "TODO"},
-    "alfalfa_hay":  {"dm_pct": 88, "cp_pct_dm": 18, "nel_mj_per_kg_dm": 5.6, "eur_per_kg_fresh": 0.20, "min_dm_kg": 0, "max_dm_kg": 8,  "source": "TODO"},
-    "soybean_meal": {"dm_pct": 89, "cp_pct_dm": 48, "nel_mj_per_kg_dm": 8.2, "eur_per_kg_fresh": 0.45, "min_dm_kg": 0, "max_dm_kg": 5,  "source": "TODO"},
-    "barley":       {"dm_pct": 88, "cp_pct_dm": 12, "nel_mj_per_kg_dm": 7.6, "eur_per_kg_fresh": 0.22, "min_dm_kg": 0, "max_dm_kg": 8,  "source": "TODO"},
-    "mineral_mix":  {"dm_pct": 97, "cp_pct_dm": 0,  "nel_mj_per_kg_dm": 0.0, "eur_per_kg_fresh": 0.80, "min_dm_kg": 0.2, "max_dm_kg": 0.2, "source": "TODO"}
+    "corn_silage":  {"dm_pct": 33, "cp_pct_dm": 7.8,  "nel_mj_per_kg_dm": 6.5, "eur_per_kg_fresh": 0.09, "min_dm_kg": 0.0,  "max_dm_kg": 12.5, "source": "agri team, citation pending"},
+    "alfalfa_hay":  {"dm_pct": 88, "cp_pct_dm": 17.5, "nel_mj_per_kg_dm": 5.4, "eur_per_kg_fresh": 0.20, "min_dm_kg": 2.0,  "max_dm_kg": 7.5,  "source": "agri team, citation pending"},
+    "soybean_meal": {"dm_pct": 89, "cp_pct_dm": 51.5, "nel_mj_per_kg_dm": 8.5, "eur_per_kg_fresh": 0.45, "min_dm_kg": 0.0,  "max_dm_kg": 3.5,  "source": "agri team, citation pending"},
+    "barley_grain": {"dm_pct": 88, "cp_pct_dm": 12.0, "nel_mj_per_kg_dm": 8.1, "eur_per_kg_fresh": 0.18, "min_dm_kg": 0.0,  "max_dm_kg": 5.5,  "source": "agri team, citation pending"},
+    "mineral_mix":  {"dm_pct": 96, "cp_pct_dm": 0.0,  "nel_mj_per_kg_dm": 0.0, "eur_per_kg_fresh": 1.80, "min_dm_kg": 0.25, "max_dm_kg": 0.45, "source": "agri team, citation pending"}
+  },
+  "silage_spoilage_rules": {
+    "normal_loss_per_month": {"dm_pct": 1.0, "cp_pct": 0.0, "nel_pct": 0.0},
+    "heat_trigger_c": 35.0,
+    "maillard_protein_trigger_c": 42.0,
+    "heat_loss_per_month": {"dm_pct": 4.5, "nel_pct": 6.0, "cp_pct_above_42c": 15.0},
+    "wet_trigger_moisture_pct": 70.0,
+    "wet_loss_per_month": {"dm_pct": 6.0, "cp_pct": 17.5}
   }
 }
