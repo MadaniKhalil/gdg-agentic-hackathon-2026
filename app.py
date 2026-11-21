@@ -6,6 +6,7 @@ import streamlit as st
 
 from agent import HERD_SIZE, run_agent
 from core.decay import apply_storage_drift
+from core.weather import get_ambient_temp_c
 
 
 def render_values(values, indent=0):
@@ -29,6 +30,18 @@ def get_ration_result(result):
         ),
         None,
     )
+
+
+def use_live_debrecen_temperature():
+    ambient_temp = get_ambient_temp_c()
+    if ambient_temp is None:
+        st.session_state["weather_unreachable"] = True
+        st.session_state.pop("weather_temp_c", None)
+        return
+
+    st.session_state["silo_temp"] = int(min(45, max(15, round(ambient_temp))))
+    st.session_state["weather_temp_c"] = ambient_temp
+    st.session_state["weather_unreachable"] = False
 
 
 st.set_page_config(page_title="Feed Ration Agent", page_icon="🐄", layout="wide")
@@ -69,6 +82,19 @@ with left:
 
     days = st.slider("Storage days", 0, 60, key="storage_days")
     temp = st.slider("Silo temp (°C)", 15, 45, key="silo_temp")
+    st.button(
+        "Use live Debrecen air temperature",
+        on_click=use_live_debrecen_temperature,
+        width="stretch",
+    )
+    if st.session_state.get("weather_unreachable"):
+        st.warning("Weather service unreachable")
+    elif "weather_temp_c" in st.session_state:
+        st.caption(
+            f"Live air temperature in Debrecen: "
+            f"{st.session_state['weather_temp_c']:.1f} C "
+            "(ambient air, not silo temperature)"
+        )
     moisture = st.slider("Moisture (%)", 50, 75, key="moisture")
     auto_mode = st.toggle("Auto mode", value=False)
     run_clicked = st.button("Run Nutrition Agent", type="primary", width="stretch")
@@ -98,12 +124,12 @@ with mid:
     st.caption(f"{baseline_cp:.1f}% baseline → {now_cp:.1f}% current")
 
     if result:
-        mode, color = {
-            "gemini": ("Live Gemini", "green"),
-            "replay": ("Replay", "orange"),
-            "offline": ("Offline", "gray"),
-        }.get(result.get("mode"), ("Unknown mode", "gray"))
-        st.badge(mode, color=color)
+        mode = {
+            "gemini": "Live Gemini",
+            "replay": "Replay of last run",
+            "offline": "Offline fallback",
+        }.get(result.get("mode"), "Unknown mode")
+        st.caption(mode)
         for step in result.get("log", []):
             name = step.get("name", "Agent step")
             if step.get("type") == "tool_call":
