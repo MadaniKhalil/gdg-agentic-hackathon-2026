@@ -73,10 +73,17 @@ with left:
 drifted = apply_storage_drift(base_feeds, days, temp, moisture)
 baseline_cp = base_feeds["corn_silage"]["cp_pct_dm"]
 now_cp = drifted["corn_silage"]["cp_pct_dm"]
+telemetry = (days, temp, moisture)
+previous_telemetry = st.session_state.get("last_telemetry")
+telemetry_changed = previous_telemetry is not None and telemetry != previous_telemetry
+auto_run = auto_mode and telemetry_changed
 
-if run_clicked or auto_mode:
+if run_clicked or auto_run:
     with st.spinner("Nutrition agent is checking the silo and ration..."):
         st.session_state["agent_result"] = run_agent(days, temp, moisture)
+elif telemetry_changed:
+    st.session_state.pop("agent_result", None)
+st.session_state["last_telemetry"] = telemetry
 
 result = st.session_state.get("agent_result")
 ration_result = get_ration_result(result)
