@@ -6,7 +6,6 @@ import streamlit as st
 
 from agent import HERD_SIZE, run_agent
 from core.decay import apply_storage_drift
-from core.optimizer import optimize_ration
 
 
 def render_values(values, indent=0):
@@ -17,6 +16,19 @@ def render_values(values, indent=0):
             render_values(value, indent + 1)
         else:
             st.markdown(f"{'  ' * indent}- **{label}:** {value}")
+
+
+def get_ration_result(result):
+    if not result:
+        return None
+    return next(
+        (
+            step.get("result", {})
+            for step in result.get("log", [])
+            if step.get("type") == "tool_result" and step.get("name") == "rebalance_ration"
+        ),
+        None,
+    )
 
 
 st.set_page_config(page_title="Feed Ration Agent", page_icon="🐄", layout="wide")
@@ -59,8 +71,6 @@ with left:
     run_clicked = st.button("Run Nutrition Agent", type="primary", use_container_width=True)
 
 drifted = apply_storage_drift(base_feeds, days, temp, moisture)
-old = optimize_ration(base_feeds, targets)
-new = optimize_ration(drifted, targets)
 baseline_cp = base_feeds["corn_silage"]["cp_pct_dm"]
 now_cp = drifted["corn_silage"]["cp_pct_dm"]
 
@@ -68,13 +78,15 @@ if run_clicked or auto_mode:
     with st.spinner("Nutrition agent is checking the silo and ration..."):
         st.session_state["agent_result"] = run_agent(days, temp, moisture)
 
+result = st.session_state.get("agent_result")
+ration_result = get_ration_result(result)
+
 with mid:
     st.subheader("Agent log")
     st.caption("Silage crude protein (% dry matter): baseline vs current")
     st.bar_chart({"Baseline": [baseline_cp], "Current": [now_cp]}, horizontal=True)
     st.caption(f"{baseline_cp:.1f}% baseline → {now_cp:.1f}% current")
 
-    result = st.session_state.get("agent_result")
     if result:
         for step in result.get("log", []):
             name = step.get("name", "Agent step")
@@ -98,26 +110,54 @@ with mid:
 with right:
     st.subheader("Old vs new recipe")
     st.caption("kg fresh feed per cow per day")
-    if new["feasible"]:
+    if not result:
+        st.info("Run the agent to compare the old and adjusted ration.")
+    elif ration_result is None:
+        st.info("The agent did not request a ration adjustment for these conditions.")
+    elif ration_result.get("feasible") is False:
+        st.error(ration_result.get("reason", "No feasible adjusted ration."))
+    elif all(
+        key in ration_result
+        for key in (
+            "old_recipe_kg_fresh",
+            "new_recipe_kg_fresh",
+            "old_cost_eur_per_cow_day",
+            "new_cost_eur_per_cow_day",
+        )
+    ):
+        old_recipe = ration_result["old_recipe_kg_fresh"]
+        new_recipe = ration_result["new_recipe_kg_fresh"]
         rows = [
             {
                 "Feed": name.replace("_", " ").title(),
-                "Old (kg)": old["kg_fresh"][name],
-                "Adjusted (kg)": new["kg_fresh"][name],
-                "Change (kg)": round(new["kg_fresh"][name] - old["kg_fresh"][name], 2),
+                "Old (kg)": old_kg,
+                "Adjusted (kg)": new_recipe.get(name, 0),
+                "Change (kg)": round(new_recipe.get(name, 0) - old_kg, 2),
             }
-            for name in base_feeds
+            for name, old_kg in old_recipe.items()
         ]
         st.dataframe(rows, hide_index=True, use_container_width=True)
-        old_herd_cost = old["cost_per_day"] * HERD_SIZE
-        new_herd_cost = new["cost_per_day"] * HERD_SIZE
-        st.metric(
-            f"Adjusted daily cost ({HERD_SIZE} cows)",
+        old_cow_cost = ration_result["old_cost_eur_per_cow_day"]
+        new_cow_cost = ration_result["new_cost_eur_per_cow_day"]
+        old_herd_cost = old_cow_cost * HERD_SIZE
+        new_herd_cost = new_cow_cost * HERD_SIZE
+        cost_cow, cost_herd = st.columns(2)
+        cost_cow.metric(
+            "Cost per cow/day",
+            f"€{new_cow_cost:,.2f}",
+            f"€{new_cow_cost - old_cow_cost:+,.2f} vs old",
+            delta_color="inverse",
+        )
+        cost_herd.metric(
+            f"Cost per herd/day ({HERD_SIZE} cows)",
             f"€{new_herd_cost:,.2f}",
             f"€{new_herd_cost - old_herd_cost:+,.2f} vs old",
             delta_color="inverse",
         )
+        st.caption("Daily feed cost per herd")
+        st.bar_chart(
+            {"Old (€)": [old_herd_cost], "Adjusted (€)": [new_herd_cost]},
+            horizontal=True,
+        )
     else:
-        st.error("No feasible adjusted ration. The current feed limits cannot meet the targets.")
-        if old["feasible"]:
-            st.metric(f"Old daily cost ({HERD_SIZE} cows)", f"€{old['cost_per_day'] * HERD_SIZE:,.2f}")
+        st.error("The agent's ration result is missing recipe or cost details.")
