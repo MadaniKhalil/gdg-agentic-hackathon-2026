@@ -20,3 +20,6 @@ Thumbs.db
 
 # Personal Claude settings (the shared .claude/settings.json is committed)
 .claude/settings.local.json
+
+# Local agent run cache
+data/last_runs.json

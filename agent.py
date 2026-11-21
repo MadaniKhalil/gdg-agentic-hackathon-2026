@@ -17,6 +17,7 @@ from core.optimizer import optimize_ration
 
 ROOT = Path(__file__).parent
 MAX_STEPS = 6
+CACHE_FILE = ROOT / "data" / "last_runs.json"
 REQUEST_TIMEOUT_MS = 30_000
 ATTEMPTS_PER_MODEL = 2
 RETRY_WAIT_SECONDS = 2
@@ -143,8 +144,8 @@ def _generate_with_retry(client, contents, config):
     raise last_error
 
 
-def run_agent(days: int, temp_c: float, moisture_pct: float) -> dict:
-    """Run the agent loop. Returns {"ok": bool, "log": [...], "final": str}."""
+def _run_gemini(days: int, temp_c: float, moisture_pct: float) -> dict:
+    """One live Gemini agent run. Returns {"ok": bool, "log": [...], "final": str}."""
     api_key = os.environ.get("GOOGLE_API_KEY")
     if not api_key:
         return {"ok": False, "log": [], "final": "GOOGLE_API_KEY missing. Add it to .env."}
@@ -174,8 +175,75 @@ def run_agent(days: int, temp_c: float, moisture_pct: float) -> dict:
     return {"ok": False, "log": log, "final": "Agent hit the step limit without finishing."}
 
 
+def _cache_key(days: int, temp_c: float, moisture_pct: float) -> str:
+    return f"{days}|{temp_c}|{moisture_pct}"
+
+
+def _load_cache() -> dict:
+    try:
+        return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_cache(key: str, result: dict) -> None:
+    try:
+        CACHE_FILE.write_text(json.dumps({**_load_cache(), key: result}, indent=2), encoding="utf-8")
+    except OSError:
+        pass  # caching is a bonus, never break the demo over it
+
+
+def _offline_note(drift: dict, ration: dict | None, stock: dict | None) -> str:
+    if drift["drift_is_small"]:
+        return "Silage quality is stable. No change to the ration is needed."
+    if not ration or not ration["feasible"]:
+        return "Silage protein dropped, and no ration meets the targets. Buy fresh silage or a protein feed."
+    lines = [
+        f"Silage protein fell by {drift['cp_drop_points']} points. New ration (kg fresh per cow per day): "
+        + ", ".join(f"{name} {kg}" for name, kg in ration["new_recipe_kg_fresh"].items()) + ".",
+        f"Cost: {ration['new_cost_eur_per_cow_day']} EUR per cow per day, "
+        f"{ration['extra_cost_eur_per_day_herd']} EUR per day more for the herd.",
+    ]
+    if stock and stock.get("reorder_needed"):
+        lines.append(f"Reorder soybean meal now: only {stock['days_left']} days of stock left.")
+    return "\n".join(lines)
+
+
+def _run_offline(days: int, temp_c: float, moisture_pct: float) -> dict:
+    """No-LLM fallback: same tools in a fixed order and a templated note. Clearly labelled."""
+    tools = _build_tools(days, temp_c, moisture_pct)
+    log: list = []
+    drift = tools["check_silo_drift"]()
+    log += [{"type": "tool_call", "name": "check_silo_drift"}, {"type": "tool_result", "name": "check_silo_drift", "result": drift}]
+    ration = stock = None
+    if not drift["drift_is_small"]:
+        ration = tools["rebalance_ration"]()
+        log += [{"type": "tool_call", "name": "rebalance_ration"}, {"type": "tool_result", "name": "rebalance_ration", "result": ration}]
+        if ration["feasible"]:
+            stock = tools["check_inventory"]()
+            log += [{"type": "tool_call", "name": "check_inventory"}, {"type": "tool_result", "name": "check_inventory", "result": stock}]
+    return {"ok": True, "log": log, "final": _offline_note(drift, ration, stock)}
+
+
+def run_agent(days: int, temp_c: float, moisture_pct: float) -> dict:
+    """Run the agent. Returns {"ok", "log", "final", "mode"}.
+
+    mode is "gemini" (live), "replay" (last good Gemini run for the same inputs) or
+    "offline" (templated note, no LLM). Show the mode in the UI so the demo stays honest.
+    """
+    key = _cache_key(days, temp_c, moisture_pct)
+    result = _run_gemini(days, temp_c, moisture_pct)
+    if result["ok"]:
+        _save_cache(key, result)
+        return {**result, "mode": "gemini"}
+    cached = _load_cache().get(key)
+    if cached:
+        return {**cached, "mode": "replay", "gemini_error": result["final"]}
+    return {**_run_offline(days, temp_c, moisture_pct), "mode": "offline", "gemini_error": result["final"]}
+
+
 if __name__ == "__main__":
     out = run_agent(days=45, temp_c=40, moisture_pct=72)
     for entry in out["log"]:
         print(entry)
-    print("\n" + out["final"])
+    print(f"\n[mode: {out['mode']}]\n" + out["final"])
