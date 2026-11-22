@@ -1,6 +1,6 @@
 # Feed Ration Agent
 
-**GDG unideb Hackathon 2026 (Agentic AI Hackathon — University of Debrecen)**
+**GDG Debrecen Agentic AI Hackathon 2026 (University of Debrecen)**
 
 **Track:** Autonomous Agents & Intelligent Systems
 
